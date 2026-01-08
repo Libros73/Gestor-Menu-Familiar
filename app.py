@@ -1,59 +1,71 @@
 from flask import Flask, render_template, request, jsonify
-import json
+from flask_sqlalchemy import SQLAlchemy
 import os
 
 app = Flask(__name__)
-ARCHIVO_DB = "recetas_db.json"
 
-# --- FUNCIONES AUXILIARES (Tu lógica de backend) ---
-def leer_datos():
-    # 1. Si el archivo no existe, devolvemos lista vacía
-    if not os.path.exists(ARCHIVO_DB):
-        return []
-    
-    # 2. Si existe, intentamos leerlo
-    try:
-        with open(ARCHIVO_DB, "r") as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        # 3. ¡AQUÍ ESTÁ EL BLINDAJE!
-        # Si el archivo existe pero está vacío o corrupto, no explotes.
-        # Simplemente asume que está vacío.
-        return []
+# CONFIGURACIÓN DE LA BASE DE DATOS
+# Le decimos: "Usa un archivo local llamado recetas.db"
+# (Más adelante, cambiaremos esta sola línea para conectar con la Nube)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-def guardar_datos(lista_nueva):
-    with open(ARCHIVO_DB, "w") as f:
-        json.dump(lista_nueva, f, indent=4)
+# INICIALIZAMOS EL ORM (El Traductor)
+db = SQLAlchemy(app)
 
-# --- RUTAS DEL SERVIDOR (Los "Caminos" de tu API) ---
+# --- DEFINICIÓN DEL MODELO (La Tabla) ---
+# Esto crea una tabla con columnas específicas. Estructura rígida = Ingeniería.
+class Receta(db.Model):
+    id = db.Column(db.Integer, primary_key=True)       # Identificador único (1, 2, 3...)
+    nombre = db.Column(db.String(100), nullable=False) # Texto de máx 100 caracteres
+    calorias = db.Column(db.Integer, nullable=False)   # Número entero
+    apta_majo = db.Column(db.Boolean, default=True)    # Verdadero/Falso
 
-# RUTA 1: La entrada principal (GET)
-# Cuando entres a la web, Python te sirve el HTML
+    # Esta función ayuda a convertir la fila de la DB a Diccionario (JSON)
+    def to_json(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "calorias": self.calorias,
+            "apta_majo": self.apta_majo
+        }
+
+# --- CREAR LA BASE DE DATOS SI NO EXISTE ---
+with app.app_context():
+    db.create_all()  # Esto crea el archivo recetas.db y la tabla automáticamente
+
+# --- RUTAS DEL SERVIDOR ---
+
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# RUTA 2: Entregar las recetas al Frontend (GET)
-# El JS llamará aquí para pedir la lista
+# RUTA GET: Leer desde SQL
 @app.route('/api/recetas', methods=['GET'])
 def obtener_recetas():
-    datos = leer_datos()
-    return jsonify(datos) # Convertimos lista Python -> JSON para JS
+    # TRADUCCIÓN: "SELECT * FROM Receta"
+    lista_recetas = Receta.query.all() 
+    
+    # Convertimos cada objeto de base de datos a JSON
+    return jsonify([receta.to_json() for receta in lista_recetas])
 
-# RUTA 3: Guardar una nueva receta (POST)
-# El JS enviará datos aquí para guardarlos
+# RUTA POST: Escribir en SQL
 @app.route('/api/recetas', methods=['POST'])
 def agregar_receta():
-    nueva_receta = request.json # Recibimos el paquete del JS
+    datos = request.json
     
-    # Lógica de guardado
-    lista = leer_datos()
-    lista.append(nueva_receta)
-    guardar_datos(lista)
+    # Creamos un nuevo objeto (fila)
+    nueva_receta = Receta(
+        nombre=datos['nombre'],
+        calorias=datos['calorias'],
+        apta_majo=datos.get('apta_majo', True)
+    )
     
-    return jsonify({"mensaje": "Guardado exitoso", "status": "ok"})
+    # TRADUCCIÓN: TRANSACTION COMMIT
+    db.session.add(nueva_receta) # Prepara la inserción
+    db.session.commit()          # Guarda los cambios permanentemente
+    
+    return jsonify({"mensaje": "Guardado exitoso en SQL", "status": "ok"})
 
-# --- ENCENDER EL MOTOR ---
 if __name__ == '__main__':
-    # debug=True permite que si cambias código, se actualice solo
     app.run(debug=True, port=5000)
