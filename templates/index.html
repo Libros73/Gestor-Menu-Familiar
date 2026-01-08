@@ -2,38 +2,37 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menú Familiar GNB</title>
-    <style>
-        /* ESTO ES CSS (Maquillaje básico) */
-        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; }
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        input { padding: 8px; margin: 5px; width: 200px; }
-        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        .lista { margin-top: 20px; }
-    </style>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-
-    <div class="panel">
-        <h1>🍽️ Planificador de Menú</h1>
+    <div class="container">
+        <h1>🍽️ Menú Familiar</h1>
         
-        <div>
+        <div class="form-group">
             <label>Plato:</label>
             <input type="text" id="inputNombre" placeholder="Ej: Ajiaco Santafereño">
         </div>
-        <div>
+        <div class="form-group">
             <label>Calorías:</label>
             <input type="number" id="inputCalorias" placeholder="Ej: 500">
         </div>
+        <div class="form-group">
+            <label>¿Apta para Majo?</label>
+            <select id="inputMajo" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ddd;">
+                <option value="si">Sí, es apto</option>
+                <option value="no">No, solo adultos</option>
+            </select>
+        </div>
 
-        <br>
         <button onclick="agregarReceta()">💾 Guardar Receta</button>
 
-        <hr>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
 
         <h3>Listado del Día:</h3>
-        <ul id="listaRecetas" class="lista">
+        <ul id="listaRecetas">
             </ul>
     </div>
 
@@ -55,6 +54,9 @@
         function agregarReceta() {
             let nombre = document.getElementById("inputNombre").value;
             let calorias = document.getElementById("inputCalorias").value;
+
+            // CAMBIO AQUÍ: Ahora leemos el valor del SELECT ("si" o "no")
+            let seleccionMajo = document.getElementById("inputMajo").value; // <--- NUEVO ID
 
             if (nombre === "" || calorias === "") {
                 alert("⚠️ Completa los campos");
@@ -94,8 +96,19 @@
             listaHTML.innerHTML = "";
 
             listaRecetas.forEach(function(item) {
-                // Fíjate que uso item.nombre y item.calorias (como en el JSON)
-                let itemVisual = `<li><strong>${item.nombre}</strong> - ${item.calorias} cal</li>`;
+                // Lógica visual para la etiqueta
+                let badgeClass = item.apta_majo ? "badge-ok" : "badge-no";
+                let textoMajo = item.apta_majo ? "👶 Apto Majo" : "⛔ +18";
+
+                let itemVisual = `
+                    <li>
+                        <div>
+                            <strong>${item.nombre}</strong>
+                            <span class="calorias">${item.calorias} Kcal</span>
+                        </div>
+                        <span class="badge ${badgeClass}">${textoMajo}</span>
+                    </li>
+                `;
                 listaHTML.innerHTML += itemVisual;
             });
         }
