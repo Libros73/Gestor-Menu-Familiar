@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Menú Familiar GNB</title>
+    <style>
+        /* ESTO ES CSS (Maquillaje básico) */
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .lista { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1>🍽️ Planificador de Menú</h1>
+        
+        <div>
+            <label>Plato:</label>
+            <input type="text" id="inputNombre" placeholder="Ej: Ajiaco Santafereño">
+        </div>
+        <div>
+            <label>Calorías:</label>
+            <input type="number" id="inputCalorias" placeholder="Ej: 500">
+        </div>
+
+        <br>
+        <button onclick="agregarReceta()">💾 Guardar Receta</button>
+
+        <hr>
+
+        <h3>Listado del Día:</h3>
+        <ul id="listaRecetas" class="lista">
+            </ul>
+    </div>
+
+    <script>
+        
+        // AL CARGAR LA PÁGINA: Pedimos las recetas guardadas al servidor
+        document.addEventListener('DOMContentLoaded', cargarRecetasDelServidor);
+
+        function cargarRecetasDelServidor() {
+            // 1. Llamamos a la ruta GET de Python
+            fetch('/api/recetas')
+                .then(response => response.json()) // Convertimos la respuesta a legible
+                .then(data => {
+                    // 'data' es la lista que viene de Python
+                    actualizarPantalla(data);
+                });
+        }
+
+        function agregarReceta() {
+            let nombre = document.getElementById("inputNombre").value;
+            let calorias = document.getElementById("inputCalorias").value;
+
+            if (nombre === "" || calorias === "") {
+                alert("⚠️ Completa los campos");
+                return;
+            }
+
+            // Creamos el objeto a enviar
+            let nuevaReceta = {
+                nombre: nombre,      // Ojo: usa las mismas claves que en Python
+                calorias: calorias,
+                apta_majo: true      // Por defecto true para el ejemplo
+            };
+
+            // 2. ENVIAR AL SERVIDOR (POST)
+            // Esto es lo más avanzado: Configurar el envío
+            fetch('/api/recetas', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(nuevaReceta) // Empaquetamos para envío
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Respuesta del servidor:", data);
+                // Si todo salió bien, recargamos la lista
+                cargarRecetasDelServidor();
+                
+                // Limpiar inputs
+                document.getElementById("inputNombre").value = "";
+                document.getElementById("inputCalorias").value = "";
+            });
+        }
+
+        function actualizarPantalla(listaRecetas) {
+            let listaHTML = document.getElementById("listaRecetas");
+            listaHTML.innerHTML = "";
+
+            listaRecetas.forEach(function(item) {
+                // Fíjate que uso item.nombre y item.calorias (como en el JSON)
+                let itemVisual = `<li><strong>${item.nombre}</strong> - ${item.calorias} cal</li>`;
+                listaHTML.innerHTML += itemVisual;
+            });
+        }
+    
+    </script>
+</body>
+</html>
