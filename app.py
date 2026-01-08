@@ -5,9 +5,21 @@ import os
 app = Flask(__name__)
 
 # CONFIGURACIÓN DE LA BASE DE DATOS
-# Le decimos: "Usa un archivo local llamado recetas.db"
-# (Más adelante, cambiaremos esta sola línea para conectar con la Nube)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
+# --- ANTES ERA ASÍ: ---
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
+
+# --- AHORA SERÁ ASÍ  ---
+uri = os.environ.get('DATABASE_URL') # Busca la variable en el entorno del servidor
+
+if uri:
+    # Corrección técnica: Render devuelve "postgres://" pero SQLAlchemy pide "postgresql://"
+    if uri.startswith("postgres://"):
+        uri = uri.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = uri
+else:
+    # Si no encuentra la variable (estás en tu PC), usa SQLite local
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # INICIALIZAMOS EL ORM (El Traductor)
