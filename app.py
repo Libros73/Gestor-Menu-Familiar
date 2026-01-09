@@ -4,36 +4,27 @@ import os
 
 app = Flask(__name__)
 
-# CONFIGURACIÓN DE LA BASE DE DATOS
-# --- ANTES ERA ASÍ: ---
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
-
-# --- AHORA SERÁ ASÍ  ---
-uri = os.environ.get('DATABASE_URL') # Busca la variable en el entorno del servidor
-
+# --- CONFIGURACIÓN DE BASE DE DATOS ROBUSTA ---
+# Detecta si estamos en Render (Nube) o en tu PC
+uri = os.environ.get('DATABASE_URL')
 if uri:
-    # Corrección técnica: Render devuelve "postgres://" pero SQLAlchemy pide "postgresql://"
     if uri.startswith("postgres://"):
         uri = uri.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = uri
 else:
-    # Si no encuentra la variable (estás en tu PC), usa SQLite local
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///recetas.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# INICIALIZAMOS EL ORM (El Traductor)
 db = SQLAlchemy(app)
 
-# --- DEFINICIÓN DEL MODELO (La Tabla) ---
-# Esto crea una tabla con columnas específicas. Estructura rígida = Ingeniería.
+# --- MODELO DE DATOS (LA TABLA) ---
 class Receta(db.Model):
-    id = db.Column(db.Integer, primary_key=True)       # Identificador único (1, 2, 3...)
-    nombre = db.Column(db.String(100), nullable=False) # Texto de máx 100 caracteres
-    calorias = db.Column(db.Integer, nullable=False)   # Número entero
-    apta_majo = db.Column(db.Boolean, default=True)    # Verdadero/Falso
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    calorias = db.Column(db.Integer, nullable=False)
+    apta_majo = db.Column(db.Boolean, default=True)
 
-    # Esta función ayuda a convertir la fila de la DB a Diccionario (JSON)
     def to_json(self):
         return {
             "id": self.id,
@@ -42,42 +33,52 @@ class Receta(db.Model):
             "apta_majo": self.apta_majo
         }
 
-# --- CREAR LA BASE DE DATOS SI NO EXISTE ---
+# Crea la DB si no existe
 with app.app_context():
-    db.create_all()  # Esto crea el archivo recetas.db y la tabla automáticamente
+    db.create_all()
 
-# --- RUTAS DEL SERVIDOR ---
+# --- RUTAS ---
 
 @app.route('/')
 def home():
     return render_template('index.html')
 
-# RUTA GET: Leer desde SQL
+# 1. LEER (GET)
 @app.route('/api/recetas', methods=['GET'])
 def obtener_recetas():
-    # TRADUCCIÓN: "SELECT * FROM Receta"
-    lista_recetas = Receta.query.all() 
-    
-    # Convertimos cada objeto de base de datos a JSON
-    return jsonify([receta.to_json() for receta in lista_recetas])
+    lista_recetas = Receta.query.all()
+    # Invertimos la lista [::-1] para que las nuevas salgan arriba
+    return jsonify([receta.to_json() for receta in lista_recetas][::-1])
 
-# RUTA POST: Escribir en SQL
+# 2. CREAR (POST)
 @app.route('/api/recetas', methods=['POST'])
 def agregar_receta():
     datos = request.json
     
-    # Creamos un nuevo objeto (fila)
+    # Debug para ver en la terminal qué llega
+    print("Recibido:", datos) 
+
     nueva_receta = Receta(
         nombre=datos['nombre'],
         calorias=datos['calorias'],
-        apta_majo=datos.get('apta_majo', True)
+        apta_majo=datos.get('apta_majo', True) 
     )
     
-    # TRADUCCIÓN: TRANSACTION COMMIT
-    db.session.add(nueva_receta) # Prepara la inserción
-    db.session.commit()          # Guarda los cambios permanentemente
+    db.session.add(nueva_receta)
+    db.session.commit()
     
-    return jsonify({"mensaje": "Guardado exitoso en SQL", "status": "ok"})
+    return jsonify({"mensaje": "Guardado exitoso", "status": "ok"})
+
+# 3. BORRAR (DELETE) - ¡NUEVO!
+@app.route('/api/recetas/<int:id>', methods=['DELETE'])
+def eliminar_receta(id):
+    receta = Receta.query.get(id)
+    if not receta:
+        return jsonify({"mensaje": "No encontrada"}), 404
+    
+    db.session.delete(receta)
+    db.session.commit()
+    return jsonify({"mensaje": "Eliminada correctamente"})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

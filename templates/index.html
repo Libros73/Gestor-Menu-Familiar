@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menú Familiar GNB</title>
-    
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
     <div class="container">
         <h1>🍽️ Menú Familiar</h1>
         
@@ -37,16 +37,13 @@
     </div>
 
     <script>
-        
-        // AL CARGAR LA PÁGINA: Pedimos las recetas guardadas al servidor
+        // Cargar recetas al abrir la página
         document.addEventListener('DOMContentLoaded', cargarRecetasDelServidor);
 
         function cargarRecetasDelServidor() {
-            // 1. Llamamos a la ruta GET de Python
             fetch('/api/recetas')
-                .then(response => response.json()) // Convertimos la respuesta a legible
+                .then(response => response.json())
                 .then(data => {
-                    // 'data' es la lista que viene de Python
                     actualizarPantalla(data);
                 });
         }
@@ -54,40 +51,34 @@
         function agregarReceta() {
             let nombre = document.getElementById("inputNombre").value;
             let calorias = document.getElementById("inputCalorias").value;
-
-            // CAMBIO AQUÍ: Ahora leemos el valor del SELECT ("si" o "no")
-            let seleccionMajo = document.getElementById("inputMajo").value; // <--- NUEVO ID
+            let seleccionMajo = document.getElementById("inputMajo").value;
 
             if (nombre === "" || calorias === "") {
-                alert("⚠️ Completa los campos");
+                alert("⚠️ Completa los campos vacíos");
                 return;
             }
 
-            // Creamos el objeto a enviar
+            // TRADUCCIÓN LÓGICA: "si" -> true, "no" -> false
+            let esApto = (seleccionMajo === "si");
+
             let nuevaReceta = {
-                nombre: nombre,      // Ojo: usa las mismas claves que en Python
+                nombre: nombre,
                 calorias: calorias,
-                apta_majo: true      // Por defecto true para el ejemplo
+                apta_majo: esApto 
             };
 
-            // 2. ENVIAR AL SERVIDOR (POST)
-            // Esto es lo más avanzado: Configurar el envío
             fetch('/api/recetas', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(nuevaReceta) // Empaquetamos para envío
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(nuevaReceta)
             })
             .then(response => response.json())
             .then(data => {
-                console.log("Respuesta del servidor:", data);
-                // Si todo salió bien, recargamos la lista
-                cargarRecetasDelServidor();
-                
-                // Limpiar inputs
+                cargarRecetasDelServidor(); // Recargar lista
+                // Limpiar campos
                 document.getElementById("inputNombre").value = "";
                 document.getElementById("inputCalorias").value = "";
+                document.getElementById("inputMajo").value = "si"; 
             });
         }
 
@@ -95,24 +86,46 @@
             let listaHTML = document.getElementById("listaRecetas");
             listaHTML.innerHTML = "";
 
+            if (listaRecetas.length === 0) {
+                listaHTML.innerHTML = "<p style='text-align:center; color:#999;'>No hay recetas aún.</p>";
+                return;
+            }
+
             listaRecetas.forEach(function(item) {
-                // Lógica visual para la etiqueta
+                // Lógica de colores (Verde/Rojo)
                 let badgeClass = item.apta_majo ? "badge-ok" : "badge-no";
-                let textoMajo = item.apta_majo ? "👶 Apto Majo" : "⛔ +18";
+                let textoMajo = item.apta_majo ? "👶 Apto Majo" : "⛔ Solo Adultos";
 
                 let itemVisual = `
                     <li>
-                        <div>
+                        <div style="flex-grow: 1;">
                             <strong>${item.nombre}</strong>
                             <span class="calorias">${item.calorias} Kcal</span>
+                            <span class="badge ${badgeClass}" style="margin-left: 10px;">${textoMajo}</span>
                         </div>
-                        <span class="badge ${badgeClass}">${textoMajo}</span>
+                        
+                        <button onclick="eliminarReceta(${item.id})" style="width: auto; background: #e74c3c; padding: 8px 12px; margin-left: 10px;">
+                            🗑️
+                        </button>
                     </li>
                 `;
                 listaHTML.innerHTML += itemVisual;
             });
         }
-    
+
+        // FUNCIÓN PARA BORRAR
+        function eliminarReceta(id) {
+            if(!confirm("¿Seguro que quieres borrar esta receta?")) return;
+
+            fetch(`/api/recetas/${id}`, { method: 'DELETE' })
+            .then(response => {
+                if (response.ok) {
+                    cargarRecetasDelServidor(); // Recargamos para que desaparezca
+                } else {
+                    alert("Error al borrar");
+                }
+            });
+        }
     </script>
 </body>
 </html>
