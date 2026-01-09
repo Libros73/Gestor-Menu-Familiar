@@ -9,10 +9,8 @@
 <body>
 
     <div class="container">
-        
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
             <h1>🍽️ Menú</h1>
-            
             {% if current_user.is_authenticated %}
                 <div style="text-align: right;">
                     <small>Hola, <b>{{ current_user.username }}</b></small><br>
@@ -27,7 +25,7 @@
             <div id="panelAdmin" style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee;">
                 <div class="form-group">
                     <label>Plato:</label>
-                    <input type="text" id="inputNombre" placeholder="Ej: Ajiaco Santafereño">
+                    <input type="text" id="inputNombre" placeholder="Ej: Ajiaco">
                 </div>
                 <div class="form-group">
                     <label>Calorías:</label>
@@ -40,27 +38,28 @@
                         <option value="no">No, solo adultos</option>
                     </select>
                 </div>
-                <button onclick="agregarReceta()">💾 Guardar Receta</button>
+                <button id="btnAccion" onclick="procesarFormulario()">💾 Guardar Receta</button>
+                <button id="btnCancelar" onclick="limpiarFormulario()" style="display:none; background:#95a5a6; margin-top:5px;">Cancelar Edición</button>
             </div>
         {% else %}
             <p style="text-align: center; color: #7f8c8d; font-style: italic; margin-bottom: 20px;">
-                Bienvenido al menú de hoy. <br> Solo el administrador puede editar los platos.
+                Solo el administrador puede editar el menú.
             </p>
         {% endif %}
 
         <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
 
         <h3>Listado del Día:</h3>
-        <ul id="listaRecetas">
-            </ul>
+        <ul id="listaRecetas"></ul>
     </div>
 
     <script>
-        // Truco de Ingeniero: Python escribe "true" o "false" directamente en el código JS
         const SOY_ADMIN = {{ 'true' if current_user.is_authenticated else 'false' }};
     </script>
 
     <script>
+        let idEnEdicion = null; // Variable Global para saber si editamos
+
         document.addEventListener('DOMContentLoaded', cargarRecetasDelServidor);
 
         function cargarRecetasDelServidor() {
@@ -68,34 +67,65 @@
                 .then(response => response.json())
                 .then(data => {
                     actualizarPantalla(data);
-                });
+                })
+                .catch(error => console.error('Error cargando recetas:', error));
         }
 
-        // Esta función solo existirá si eres admin (porque el botón solo sale si eres admin)
-        function agregarReceta() {
+        function procesarFormulario() {
             let nombre = document.getElementById("inputNombre").value;
             let calorias = document.getElementById("inputCalorias").value;
             let seleccionMajo = document.getElementById("inputMajo").value;
 
             if (nombre === "" || calorias === "") { alert("⚠️ Completa los campos"); return; }
-
             let esApto = (seleccionMajo === "si");
 
-            fetch('/api/recetas', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ nombre: nombre, calorias: calorias, apta_majo: esApto })
-            })
-            .then(response => {
-                if (response.ok) {
-                    cargarRecetasDelServidor();
-                    document.getElementById("inputNombre").value = "";
-                    document.getElementById("inputCalorias").value = "";
-                    document.getElementById("inputMajo").value = "si"; 
-                } else {
-                    alert("⛔ Error: No tienes permiso para guardar.");
-                }
-            });
+            if (idEnEdicion === null) {
+                // CREAR
+                fetch('/api/recetas', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ nombre: nombre, calorias: calorias, apta_majo: esApto })
+                }).then(res => { if(res.ok) { limpiarFormulario(); cargarRecetasDelServidor(); } });
+            } else {
+                // ACTUALIZAR (PUT)
+                fetch(`/api/recetas/${idEnEdicion}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ nombre: nombre, calorias: calorias, apta_majo: esApto })
+                }).then(res => { if(res.ok) { alert("✅ Actualizado"); limpiarFormulario(); cargarRecetasDelServidor(); } });
+            }
+        }
+
+        // CARGAR DATOS EN EL FORMULARIO
+        function iniciarEdicion(id, nombre, calorias, aptaMajo) {
+            idEnEdicion = id;
+            document.getElementById("inputNombre").value = nombre;
+            document.getElementById("inputCalorias").value = calorias;
+            document.getElementById("inputMajo").value = aptaMajo ? "si" : "no";
+
+            // Cambiar aspecto visual
+            let btn = document.getElementById("btnAccion");
+            btn.innerText = "🔄 Actualizar Receta";
+            btn.style.backgroundColor = "#3498db";
+            
+            // Mostrar botón cancelar
+            document.getElementById("btnCancelar").style.display = "block";
+            
+            // Scroll suave hacia arriba
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function limpiarFormulario() {
+            idEnEdicion = null;
+            document.getElementById("inputNombre").value = "";
+            document.getElementById("inputCalorias").value = "";
+            document.getElementById("inputMajo").value = "si";
+
+            let btn = document.getElementById("btnAccion");
+            btn.innerText = "💾 Guardar Receta";
+            btn.style.backgroundColor = "#2ecc71";
+            
+            document.getElementById("btnCancelar").style.display = "none";
         }
 
         function actualizarPantalla(listaRecetas) {
@@ -111,14 +141,20 @@
                 let badgeClass = item.apta_majo ? "badge-ok" : "badge-no";
                 let textoMajo = item.apta_majo ? "👶 Apto Majo" : "⛔ Solo Adultos";
 
-                // --- LÓGICA DE VISUALIZACIÓN ---
-                // Si SOY_ADMIN es true, muestro el botón de basura. Si no, string vacío "".
-                let botonBorrarHTML = "";
+                let botonesHTML = "";
                 if (SOY_ADMIN) {
-                    botonBorrarHTML = `
-                        <button onclick="eliminarReceta(${item.id})" style="width: auto; background: #e74c3c; padding: 8px 12px; margin-left: 10px;">
-                            🗑️
-                        </button>
+                    // BOTONES DE ACCIÓN (Lápiz y Basura)
+                    botonesHTML = `
+                        <div style="min-width: 80px; text-align: right;">
+                            <button onclick="iniciarEdicion(${item.id}, '${item.nombre}', ${item.calorias}, ${item.apta_majo})" 
+                                    style="background: #f39c12; padding: 6px 10px; border:none; border-radius:5px; cursor:pointer; color:white;">
+                                ✏️
+                            </button>
+                            <button onclick="eliminarReceta(${item.id})" 
+                                    style="background: #e74c3c; padding: 6px 10px; margin-left: 5px; border:none; border-radius:5px; cursor:pointer; color:white;">
+                                🗑️
+                            </button>
+                        </div>
                     `;
                 }
 
@@ -129,7 +165,8 @@
                             <span class="calorias">${item.calorias} Kcal</span>
                             <span class="badge ${badgeClass}" style="margin-left: 10px;">${textoMajo}</span>
                         </div>
-                        ${botonBorrarHTML} </li>
+                        ${botonesHTML}
+                    </li>
                 `;
                 listaHTML.innerHTML += itemVisual;
             });
@@ -138,10 +175,7 @@
         function eliminarReceta(id) {
             if(!confirm("¿Borrar receta?")) return;
             fetch(`/api/recetas/${id}`, { method: 'DELETE' })
-            .then(res => {
-                if (res.ok) cargarRecetasDelServidor();
-                else alert("⛔ No tienes permiso.");
-            });
+            .then(res => { if (res.ok) cargarRecetasDelServidor(); });
         }
     </script>
 </body>
