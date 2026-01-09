@@ -9,27 +9,46 @@
 <body>
 
     <div class="container">
-        <h1>🍽️ Menú Familiar</h1>
         
-        <div class="form-group">
-            <label>Plato:</label>
-            <input type="text" id="inputNombre" placeholder="Ej: Ajiaco Santafereño">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h1>🍽️ Menú</h1>
+            
+            {% if current_user.is_authenticated %}
+                <div style="text-align: right;">
+                    <small>Hola, <b>{{ current_user.username }}</b></small><br>
+                    <a href="/logout" style="color: #e74c3c; font-size: 0.9rem;">Salir</a>
+                </div>
+            {% else %}
+                <a href="/login" style="color: #3498db; text-decoration: none; font-weight: bold;">🔑 Soy el Chef</a>
+            {% endif %}
         </div>
-        <div class="form-group">
-            <label>Calorías:</label>
-            <input type="number" id="inputCalorias" placeholder="Ej: 500">
-        </div>
-        <div class="form-group">
-            <label>¿Apta para Majo?</label>
-            <select id="inputMajo" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ddd;">
-                <option value="si">Sí, es apto</option>
-                <option value="no">No, solo adultos</option>
-            </select>
-        </div>
+        
+        {% if current_user.is_authenticated %}
+            <div id="panelAdmin" style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #eee;">
+                <div class="form-group">
+                    <label>Plato:</label>
+                    <input type="text" id="inputNombre" placeholder="Ej: Ajiaco Santafereño">
+                </div>
+                <div class="form-group">
+                    <label>Calorías:</label>
+                    <input type="number" id="inputCalorias" placeholder="Ej: 500">
+                </div>
+                <div class="form-group">
+                    <label>¿Apta para Majo?</label>
+                    <select id="inputMajo" style="width:100%; padding:12px; border-radius:8px; border:1px solid #ddd;">
+                        <option value="si">Sí, es apto</option>
+                        <option value="no">No, solo adultos</option>
+                    </select>
+                </div>
+                <button onclick="agregarReceta()">💾 Guardar Receta</button>
+            </div>
+        {% else %}
+            <p style="text-align: center; color: #7f8c8d; font-style: italic; margin-bottom: 20px;">
+                Bienvenido al menú de hoy. <br> Solo el administrador puede editar los platos.
+            </p>
+        {% endif %}
 
-        <button onclick="agregarReceta()">💾 Guardar Receta</button>
-
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 10px 0;">
 
         <h3>Listado del Día:</h3>
         <ul id="listaRecetas">
@@ -37,7 +56,11 @@
     </div>
 
     <script>
-        // Cargar recetas al abrir la página
+        // Truco de Ingeniero: Python escribe "true" o "false" directamente en el código JS
+        const SOY_ADMIN = {{ 'true' if current_user.is_authenticated else 'false' }};
+    </script>
+
+    <script>
         document.addEventListener('DOMContentLoaded', cargarRecetasDelServidor);
 
         function cargarRecetasDelServidor() {
@@ -48,37 +71,30 @@
                 });
         }
 
+        // Esta función solo existirá si eres admin (porque el botón solo sale si eres admin)
         function agregarReceta() {
             let nombre = document.getElementById("inputNombre").value;
             let calorias = document.getElementById("inputCalorias").value;
             let seleccionMajo = document.getElementById("inputMajo").value;
 
-            if (nombre === "" || calorias === "") {
-                alert("⚠️ Completa los campos vacíos");
-                return;
-            }
+            if (nombre === "" || calorias === "") { alert("⚠️ Completa los campos"); return; }
 
-            // TRADUCCIÓN LÓGICA: "si" -> true, "no" -> false
             let esApto = (seleccionMajo === "si");
-
-            let nuevaReceta = {
-                nombre: nombre,
-                calorias: calorias,
-                apta_majo: esApto 
-            };
 
             fetch('/api/recetas', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(nuevaReceta)
+                body: JSON.stringify({ nombre: nombre, calorias: calorias, apta_majo: esApto })
             })
-            .then(response => response.json())
-            .then(data => {
-                cargarRecetasDelServidor(); // Recargar lista
-                // Limpiar campos
-                document.getElementById("inputNombre").value = "";
-                document.getElementById("inputCalorias").value = "";
-                document.getElementById("inputMajo").value = "si"; 
+            .then(response => {
+                if (response.ok) {
+                    cargarRecetasDelServidor();
+                    document.getElementById("inputNombre").value = "";
+                    document.getElementById("inputCalorias").value = "";
+                    document.getElementById("inputMajo").value = "si"; 
+                } else {
+                    alert("⛔ Error: No tienes permiso para guardar.");
+                }
             });
         }
 
@@ -92,9 +108,19 @@
             }
 
             listaRecetas.forEach(function(item) {
-                // Lógica de colores (Verde/Rojo)
                 let badgeClass = item.apta_majo ? "badge-ok" : "badge-no";
                 let textoMajo = item.apta_majo ? "👶 Apto Majo" : "⛔ Solo Adultos";
+
+                // --- LÓGICA DE VISUALIZACIÓN ---
+                // Si SOY_ADMIN es true, muestro el botón de basura. Si no, string vacío "".
+                let botonBorrarHTML = "";
+                if (SOY_ADMIN) {
+                    botonBorrarHTML = `
+                        <button onclick="eliminarReceta(${item.id})" style="width: auto; background: #e74c3c; padding: 8px 12px; margin-left: 10px;">
+                            🗑️
+                        </button>
+                    `;
+                }
 
                 let itemVisual = `
                     <li>
@@ -103,27 +129,18 @@
                             <span class="calorias">${item.calorias} Kcal</span>
                             <span class="badge ${badgeClass}" style="margin-left: 10px;">${textoMajo}</span>
                         </div>
-                        
-                        <button onclick="eliminarReceta(${item.id})" style="width: auto; background: #e74c3c; padding: 8px 12px; margin-left: 10px;">
-                            🗑️
-                        </button>
-                    </li>
+                        ${botonBorrarHTML} </li>
                 `;
                 listaHTML.innerHTML += itemVisual;
             });
         }
 
-        // FUNCIÓN PARA BORRAR
         function eliminarReceta(id) {
-            if(!confirm("¿Seguro que quieres borrar esta receta?")) return;
-
+            if(!confirm("¿Borrar receta?")) return;
             fetch(`/api/recetas/${id}`, { method: 'DELETE' })
-            .then(response => {
-                if (response.ok) {
-                    cargarRecetasDelServidor(); // Recargamos para que desaparezca
-                } else {
-                    alert("Error al borrar");
-                }
+            .then(res => {
+                if (res.ok) cargarRecetasDelServidor();
+                else alert("⛔ No tienes permiso.");
             });
         }
     </script>
